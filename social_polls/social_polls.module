@@ -1,0 +1,154 @@
+<?php
+
+define('OPINIONSTAGE_SERVER_BASE', "www.opinionstage.com"); /* Don't include the protocol, added dynamically */
+define('OPINIONSTAGE_WIDGET_VERSION', '7.1.0');
+define('OPINIONSTAGE_WIDGET_PLUGIN_NAME', 'Social Polls by OpinionStage');
+define('OPINIONSTAGE_WIDGET_API_KEY', 'wp35e8');
+define('OPINIONSTAGE_WIDGET_SHORTCODE', 'socialpoll');
+define('OPINIONSTAGE_WIDGET_UNIQUE_ID', 'social-polls-by-opinionstage');
+define('OPINIONSTAGE_WIDGET_UNIQUE_LOCATION', __FILE__);
+
+/**
+ * @file
+ * A block module that displays recent blog and forum posts.
+ */
+
+/**
+ * Implements hook_help().
+ */
+function social_polls_help($path, $arg) {
+	switch ($path) {
+		case "admin/help#social_polls":
+			$output = '';
+			$output .= '<h3>' . t('About') . '</h3>';
+			$output .= '<p>' . t('The Social Poll module') . '</p>';
+			$output .= '<h3>' . t('Uses') . '</h3>';
+			$output .= '<dl>';
+			$output .= '<dt>' . t('Creating a poll') . '</dt>';
+			$output .= '<dt>' . t('Viewing polls') . '</dt>';
+			$output .= '</dl>';
+			return $output;
+			break;
+	}
+}
+
+/**
+ * Implements hook_menu().
+ */
+function social_polls_menu() {
+  $items['opinion_stage'] = array(
+    'title' => 'Opinion Stage',
+    'page callback' => 'navigate_page',
+    'access callback' => TRUE,
+  );
+
+  $items['node/add/opinion_stage'] = array(
+    'title' => 'Opinion Stage poll',
+    'page callback' => 'poll_page',
+    'access callback' => TRUE,
+  );
+
+  return $items;
+}
+
+/**
+ * Menu callback to provide a simple list of links.
+ */
+function navigate_page() {
+//  drupal_add_css('/sites/all/modules/social_polls/style.css', '', '', TRUE);
+  $output = '';
+  $output .= '<h2>' . t('Actions') . '</h2>';
+  $output .= '<ul>';
+  $output .= '<li>' . t(opinionstage_create_link('Create a Poll', 'new_poll', '')) . '</li>';
+  $output .= '<li>' . t(opinionstage_create_link('Manage Polls', 'dashboard', '')) . '</li>';
+  $output .= '<li>' . '<a href="http://www.opinionstage.com/dashboard?tab=containers" target="_blank">Manage Containers</a>' . '</li>';
+  $output .= '</ul>';
+  $output .= '<h2>' . t('Help') . '</h2>';
+  $output .= '<ul>';
+  $output .= '<li>' . '<a href="http://blog.opinionstage.com/wordpress-poll-how-to-add-polls-to-wordpress-sites/?o=wp35e8" target="_blank">Help</a>' . '</li>';
+  $output .= '<li>' . t(opinionstage_create_link('Showcase', 'showcase', '')) . '</li>';
+  $output .= '<li>' . '<a href="https://opinionstage.zendesk.com/anonymous_requests/new" target="_blank">Contact Us</a>' . '</li>';
+  $output .= '</ul>';
+
+  return $output;
+}
+
+/**
+ * Menu callback to provide a simple list of links.
+ */
+function poll_page() {
+  $output = '';
+  $output .= '<h1><strong>' . t('Insert a Poll') . '</strong></h1>';
+  $output .= '<h3><strong>' . t('Enter Poll ID (e.g. 4567):') . '</strong></h3>';
+  $output .= '<p><input type="text" name="poll-id" id="opinionstage-poll-id" value="" /></p>' .	'<p><input type="button" id="opinionstage-submit" class="button-primary" value="Insert Poll" name="submit" /></p>';
+  $output .= '<p><strong>' . t("Haven't created a poll yet?") . '</strong></br></br>' . t(opinionstage_create_link('Create a new poll', 'new_poll', '')) . '</p>';
+  $output .= '<p><strong>' . t("Don't know the poll ID?") . '</strong></br></br>' . t(opinionstage_create_link('Find ID of an existing poll', 'dashboard', '')) . '</p>';
+
+  return $output;
+}
+
+/**
+ * Utility function to create a link with the correct host and all the required information.
+ */
+function opinionstage_create_link($caption, $page, $params = "", $options = array()) {
+	$style = empty($options['style']) ? '' : $options['style'];
+	$new_page = empty($options['new_page']) ? true : $options['new_page'];	
+	$params_prefix = empty($params) ? "" : "&";	
+	$link = "http://".OPINIONSTAGE_SERVER_BASE."/".$page."?o=".OPINIONSTAGE_WIDGET_API_KEY.$params_prefix.$params;
+	
+	return "<a href=\"".$link."\"".($new_page ? " target='_blank'" : "")." style=".$style.">".$caption."</a>";
+}
+
+/**
+ * Main function for creating the widget html representation.
+ * Transforms the shorcode parameters to the desired iframe call.
+ *
+ * Syntax as follows:
+ * shortcode name - OPINIONSTAGE_WIDGET_SHORTCODE
+ *
+ * Arguments:
+ * @param  id - Id of the poll
+ *
+ */
+function opinionstage_add_poll($atts) {
+	extract(shortcode_atts(array('id' => 0), $atts));
+	if(!is_feed()) {
+		$id = intval($id);
+		return opinionstage_create_embed_code($id);
+	} else {
+		return __('Note: There is a poll embedded within this post, please visit the site to participate in this post\'s poll.', OPINIONSTAGE_WIDGET_UNIQUE_ID);
+	}
+}
+
+/**
+ * Create the The iframe HTML Tag according to the given paramters.
+ * Either get the embed code or embeds it directly in case 
+ *
+ * Arguments:
+ * @param  id - Id of the poll
+ */
+function opinionstage_create_embed_code($id) {    
+    // Only present if id is available 
+    if (isset($id) && !empty($id)) {        		
+		// Load embed code from the cache if possible
+		$is_homepage = is_home();
+		$transient_name = 'embed_code' . $id . '_' . ($is_homepage ? "1" : "0");
+		if ( false === ( $code = get_transient($transient_name) ) ) {
+			$embed_code_url = "http://".OPINIONSTAGE_SERVER_BASE."/api/debates/" . $id . "/embed_code.json";
+			if ($is_homepage) {
+				$embed_code_url .= "?h=1";
+			}
+		
+			extract(opinionstage_get_contents($embed_code_url));
+			$data = json_decode($raw_data);
+			if ($success) {
+				$code = $data->{'code'};			
+				// Set the embed code to be cached for an hour
+				set_transient($transient_name, $code, 3600);
+			}
+		}
+    }
+	return $code;
+}
+
+?>
