@@ -1,0 +1,4 @@
+name = Social Polls
+description = Opinion Stage
+core = 7.x
+files[] = social_polls.module
